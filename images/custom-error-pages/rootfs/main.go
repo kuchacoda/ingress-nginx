@@ -153,8 +153,8 @@ func errorHandler(path, defaultFormat string) func(http.ResponseWriter, *http.Re
 		if !strings.HasPrefix(ext, ".") {
 			ext = "." + ext
 		}
-		// special case for compatibility
-		if ext == ".htm" {
+		// Go can list .ehtml or .htm first for the bundled .html pages.
+		if ext == ".htm" || ext == ".ehtml" {
 			ext = ".html"
 		}
 		file := fmt.Sprintf("%v/%v%v", path, code, ext)

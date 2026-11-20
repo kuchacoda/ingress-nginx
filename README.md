@@ -34,6 +34,34 @@ balancer.
 
 [Learn more about Ingress on the Kubernetes documentation site](https://kubernetes.io/docs/concepts/services-networking/ingress/).
 
+## Build container images locally
+
+From the repository root, use a shell with Docker and the Buildx plugin (on Windows, use WSL with Linux containers enabled).
+The build compiles NGINX with this fork's patches and builds the Go binaries inside Docker.
+
+```sh
+./build/local-images.sh
+docker image ls 'ingress-nginx-local/*'
+```
+
+This loads `controller`, `kube-webhook-certgen` and `custom-error-pages` into local Docker. Each image takes its version from its own `TAG` file. The first controller build downloads and compiles NGINX and its modules. Subsequent builds reuse the BuildKit cache.
+
+To build just the controller and check its version without a Kubernetes cluster, run
+
+```sh
+./build/local-images.sh controller
+docker run --rm "ingress-nginx-local/controller:$(cat TAG)" /nginx-ingress-controller --version
+```
+
+The controller Pod uses this one image, which includes NGINX. Make the image available to the cluster
+and set `controller.image.registry`, `controller.image.image` and `controller.image.tag` in Helm to match.
+On install and upgrade, the chart's default admission webhook Jobs use the published `kube-webhook-certgen`
+image to create the TLS Secret and patch the webhook configuration. An offline cluster needs a copy of
+that image as well. The `custom-error-pages` image is optional.
+
+Pass `nginx` to load the NGINX base image on its own, or `controller-chroot` for the chroot variant. The latter needs a builder that permits `mknod`.
+The default platform is the builder's native platform. For example, to build an AMD64 controller on Apple Silicon with Docker Desktop, run `./build/local-images.sh --set '*.platform=linux/amd64' controller`.
+
 ## Usage warnings
 
 If you are not already using ingress-nginx, you should not be deploying it as it is [not being developed](#retiring). Instead you should identify a [Gateway API](https://gateway-api.sigs.k8s.io/guides/) implementation and use it.

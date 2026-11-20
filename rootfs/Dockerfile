@@ -14,9 +14,13 @@
 
 ARG BASE_IMAGE
 
+# The local Bake build supplies this stage directly from the Go build.
+FROM scratch AS controller-binaries
+ARG TARGETARCH
+COPY bin/${TARGETARCH}/ /
+
 FROM ${BASE_IMAGE}
 
-ARG TARGETARCH
 ARG VERSION
 ARG COMMIT_SHA
 ARG BUILD_ID=UNSET
@@ -41,9 +45,7 @@ RUN apk update \
 
 COPY --chown=www-data:www-data etc /etc
 
-COPY --chown=www-data:www-data bin/${TARGETARCH}/dbg /
-COPY --chown=www-data:www-data bin/${TARGETARCH}/nginx-ingress-controller /
-COPY --chown=www-data:www-data bin/${TARGETARCH}/wait-shutdown /
+COPY --from=controller-binaries --chown=www-data:www-data /dbg /nginx-ingress-controller /wait-shutdown /
 
 # Fix permission during the build to avoid issues at runtime
 # with volumes (custom templates)

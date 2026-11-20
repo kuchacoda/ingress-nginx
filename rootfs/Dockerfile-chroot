@@ -14,6 +14,11 @@
 
 ARG BASE_IMAGE
 
+# The local Bake build supplies this stage directly from the Go build.
+FROM scratch AS controller-binaries
+ARG TARGETARCH
+COPY bin/${TARGETARCH}/ /
+
 FROM ${BASE_IMAGE} AS chroot
 
 # This intermediary image will be used only to copy all the required files to the chroot
@@ -25,7 +30,6 @@ RUN apk update \
 
 FROM alpine:3.23.3@sha256:25109184c71bdad752c8312a8623239686a9a2071e8825f20acb8f2198c3f659
 
-ARG TARGETARCH
 ARG VERSION
 ARG COMMIT_SHA
 ARG BUILD_ID=UNSET
@@ -63,9 +67,7 @@ COPY --from=chroot /chroot /chroot
 
 COPY --chown=www-data:www-data etc /chroot/etc
 
-COPY --chown=www-data:www-data bin/${TARGETARCH}/dbg /
-COPY --chown=www-data:www-data bin/${TARGETARCH}/nginx-ingress-controller /
-COPY --chown=www-data:www-data bin/${TARGETARCH}/wait-shutdown /
+COPY --from=controller-binaries --chown=www-data:www-data /dbg /nginx-ingress-controller /wait-shutdown /
 COPY --chown=www-data:www-data nginx-chroot-wrapper.sh /usr/bin/nginx
 
 WORKDIR /chroot/etc/nginx
