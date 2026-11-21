@@ -36,6 +36,7 @@ base=$(git merge-base --all "$COMMIT_SHA" "$upstream_main") ||
   die "Cannot find the upstream base. Use a full clone with the release merged."
 [[ $base == "$upstream_sha" ]] || die "Checkout is not based on $release ($upstream_sha). See the release runbook."
 TAG=${release#controller-}
+printf 'Upstream %s (%s), fork %s\n' "$release" "$upstream_sha" "$COMMIT_SHA" >&2
 if [[ $mode == publish ]]; then
   registry_host=${REGISTRY:-}
   registry_host=${registry_host%%/*}
@@ -56,6 +57,7 @@ if [[ $mode != publish ]]; then
   options=(--set '*.platform=linux/amd64' --provenance=false)
   for image in "${images[@]}"; do
     options+=(--set "$image.tags=$REGISTRY/$image:$TAG"
+              --set "$image.labels.org.opencontainers.image.source=https://github.com/kuchacoda/ingress-nginx"
               --set "$image.labels.org.opencontainers.image.version=$TAG"
               --set "$image.labels.org.opencontainers.image.revision=$COMMIT_SHA")
   done
@@ -103,9 +105,16 @@ trap 'rm -rf "$tmp"' EXIT
 
 # Returns 0 for matching content, 1 for a missing tag. Any other error stops the release.
 published() {
-  local ref=$1 id=$2 remote_id digest
+  local ref=$1 id=$2 remote_id digest child
   if docker buildx imagetools inspect --raw "$ref" >"$tmp/manifest" 2>"$tmp/error"; then
     remote_id=$(jq -r '.config.digest // empty' "$tmp/manifest") || die "Invalid manifest for $ref"
+    if [[ -z $remote_id ]]; then
+      child=$(jq -er '[.manifests[] | select(.platform.os == "linux" and .platform.architecture == "amd64")] |
+        if length == 1 then .[0].digest else error("expected one linux/amd64 manifest") end' "$tmp/manifest") ||
+        die "Cannot verify the linux/amd64 image in $ref. Keeping the published tag."
+      remote_id=$(docker buildx imagetools inspect --raw "${ref%:*}@$child" | jq -er '.config.digest') ||
+        die "Cannot verify the child manifest of $ref."
+    fi
     [[ $remote_id == "$id" ]] || die "$ref already exists with different content. Keeping the published tag."
     digest=$(shasum -a 256 <"$tmp/manifest") || die "Cannot hash the manifest for $ref"
     printf '%s@sha256:%s\n' "$ref" "${digest%% *}"
@@ -122,10 +131,19 @@ pending=()
 expected="linux/amd64 $TAG $COMMIT_SHA"
 for image in "${images[@]}"; do
   ref="$REGISTRY/$image:$TAG"
-  metadata=$(docker image inspect --format '{{.Os}}/{{.Architecture}} {{index .Config.Labels "org.opencontainers.image.version"}} {{index .Config.Labels "org.opencontainers.image.revision"}}' "$ref") ||
+  docker image inspect --format '{{.Id}}' "$ref" >"$tmp/$image.local-id" ||
     die "Run $0 build in this checkout first."
+  # Docker's containerd store uses the manifest or index digest as its local ID.
+  # Hash the actual image config for a comparison that also works on classic Docker.
+  docker image save -o "$tmp/$image.tar" "$ref"
+  config=$(tar -xOf "$tmp/$image.tar" manifest.json | jq -er '
+    if length == 1 then .[0].Config else error("expected a single-platform release build") end')
+  tar -xOf "$tmp/$image.tar" "$config" >"$tmp/$image.json"
+  metadata=$(jq -r '[.os + "/" + .architecture, .config.Labels["org.opencontainers.image.version"],
+    .config.Labels["org.opencontainers.image.revision"]] | join(" ")' "$tmp/$image.json")
   [[ $metadata == "$expected" ]] || die "Local $ref does not match $expected. Run $0 build first."
-  id=$(docker image inspect --format '{{.Id}}' "$ref")
+  checksum=$(shasum -a 256 <"$tmp/$image.json")
+  id="sha256:${checksum%% *}"
   printf '%s\n' "$id" >"$tmp/$image.id"
   if ! published "$ref" "$id"; then pending+=("$image"); fi
 done
@@ -134,11 +152,11 @@ done
 for image in "${pending[@]}"; do
   ref="$REGISTRY/$image:$TAG"
   id=$(cat "$tmp/$image.id")
-  [[ $(docker image inspect --format '{{.Id}}' "$ref") == "$id" ]] || die "Local $ref changed during publication."
+  [[ $(docker image inspect --format '{{.Id}}' "$ref") == "$(cat "$tmp/$image.local-id")" ]] ||
+    die "Local $ref changed during publication."
   if published "$ref" "$id"; then continue; fi
   if [[ ${RELEASE_PUSH_TOOL:-docker} == regctl ]]; then
-    docker image save -o "$tmp/image.tar" "$ref"
-    regctl image import "$ref" "$tmp/image.tar"
+    regctl image import "$ref" "$tmp/$image.tar"
   else
     docker push "$ref"
   fi
