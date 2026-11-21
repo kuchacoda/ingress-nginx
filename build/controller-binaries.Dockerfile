@@ -12,7 +12,8 @@ COPY build/build.sh build/build.sh
 ARG TARGETARCH
 ARG TAG
 ARG COMMIT_SHA
-RUN --mount=type=cache,target=/go/pkg/mod \
+RUN --mount=type=secret,id=build_ca,target=/etc/ssl/certs/ca-certificates.crt \
+    --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     GOOS=linux ARCH="$TARGETARCH" PKG=k8s.io/ingress-nginx REPO_INFO=local \
     sh build/build.sh
