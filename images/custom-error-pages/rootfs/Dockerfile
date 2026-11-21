@@ -14,19 +14,18 @@
 
 ARG GOLANG_VERSION
 
-FROM golang:${GOLANG_VERSION}-alpine3.23 AS builder
+FROM --platform=$BUILDPLATFORM golang:${GOLANG_VERSION}-alpine3.23 AS builder
 
-RUN apk update \
-    && apk upgrade && apk add git
+ARG TARGETARCH
 
 WORKDIR /go/src/k8s.io/ingress-nginx/images/custom-error-pages
 
 COPY . .
 
-RUN go get . && \
-    CGO_ENABLED=0 go build -a -installsuffix cgo \
-	-ldflags "-s -w" \
-	-o nginx-errors .
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=linux GOARCH="$TARGETARCH" go build -mod=readonly -ldflags="-s -w" -o nginx-errors . \
+    && chmod -R a+rX www etc
 
 # Use distroless as minimal base image to package the binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details

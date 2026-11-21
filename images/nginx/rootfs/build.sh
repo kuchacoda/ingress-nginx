@@ -279,11 +279,15 @@ get_src 7b0446f0b3e0b63b57883e0464d883f0ac4eab82ec7746599d37563dc6808203 \
 get_src f12ee3b74f76f77380863fd4f7b0eca9f72e8a5a51389b5e3315b51140a470f8 \
         "https://github.com/ssdeep-project/ssdeep/archive/$SSDEEP_VERSION.tar.gz" "ssdeep"
 
-# improve compilation times
-CORES=$(($(grep -c ^processor /proc/cpuinfo) - 1))
+# Leave one CPU available on multicore builders.
+CORES=$(nproc)
+if (( CORES > 1 )); then
+  CORES=$((CORES - 1))
+fi
 
 export MAKEFLAGS=-j${CORES}
 export CTEST_BUILD_FLAGS=${MAKEFLAGS}
+export CMAKE_BUILD_PARALLEL_LEVEL=${CORES}
 
 # Install luajit from openresty fork
 export LUAJIT_LIB=/usr/local/lib
@@ -535,6 +539,7 @@ export OTEL_TEMP_INSTALL=/tmp/otel
 mkdir -p ${OTEL_TEMP_INSTALL}
 
 cd ${BUILD_PATH}/opentelemetry-cpp-contrib-${OPENTELEMETRY_CONTRIB_COMMIT}/instrumentation/nginx
+cp /otel-nginx.cmake nginx.cmake
 mkdir -p build
 cd build
 cmake -DCMAKE_BUILD_TYPE=Release \
@@ -542,7 +547,7 @@ cmake -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_CXX_STANDARD=17 \
         -DCMAKE_INSTALL_PREFIX=${OTEL_TEMP_INSTALL} \
         -DBUILD_SHARED_LIBS=ON \
-        -DNGINX_VERSION=${NGINX_VERSION} \
+        -DNGINX_SOURCE_DIR="${BUILD_PATH}/nginx-${NGINX_VERSION}" \
         ..
 cmake --build . -j ${CORES} --target install
 

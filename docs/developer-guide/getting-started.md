@@ -96,19 +96,16 @@ make helm-test
 
 ### Custom docker image
 
-In some cases, it can be useful to build a docker image and publish such an image to a private or custom registry location.
-
-This can be done setting two environment variables, `REGISTRY` and `TAG`
+To build a controller from this checkout, including its NGINX patches, set `REGISTRY` to your registry and image namespace. Set `TAG` to choose a controller tag.
 
 ```console
+export REGISTRY="registry.example.com/my-team"
 export TAG="dev"
-export REGISTRY="$USER"
-
-make build image
+./build/local-images.sh controller
 ```
 
-and then publish such version with
+The image is now available in local Docker. To publish it, run
 
 ```console
-docker push $REGISTRY/controller:$TAG
+docker push "$REGISTRY/controller:$TAG"
 ```

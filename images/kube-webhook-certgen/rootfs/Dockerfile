@@ -16,17 +16,15 @@ ARG GOLANG_VERSION
 
 FROM --platform=$BUILDPLATFORM golang:${GOLANG_VERSION} AS builder
 
-ARG BUILDPLATFORM
 ARG TARGETARCH
-
 
 WORKDIR /workspace
 COPY . .
-RUN go mod tidy && CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -a -o kube-webhook-certgen main.go
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=linux GOARCH="$TARGETARCH" go build -mod=readonly -o kube-webhook-certgen main.go
 
-FROM --platform=$BUILDPLATFORM gcr.io/distroless/static:nonroot
-ARG BUILDPLATFORM
-ARG TARGETARCH
+FROM gcr.io/distroless/static:nonroot
 
 LABEL org.opencontainers.image.source=https://github.com/kubernetes/ingress-nginx
 
