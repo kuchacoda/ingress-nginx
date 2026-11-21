@@ -22,7 +22,8 @@ WORKDIR /go/src/k8s.io/ingress-nginx/images/custom-error-pages
 
 COPY . .
 
-RUN --mount=type=cache,target=/go/pkg/mod \
+RUN --mount=type=secret,id=build_ca,target=/etc/ssl/certs/ca-certificates.crt \
+    --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=linux GOARCH="$TARGETARCH" go build -mod=readonly -ldflags="-s -w" -o nginx-errors . \
     && chmod -R a+rX www etc

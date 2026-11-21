@@ -15,7 +15,12 @@ FROM alpine:3.23.3@sha256:25109184c71bdad752c8312a8623239686a9a2071e8825f20acb8f
 
 COPY . /
 
-RUN apk update \
+RUN --mount=type=secret,id=build_ca \
+  if [ -f /run/secrets/build_ca ]; then \
+    export SSL_CERT_FILE=/run/secrets/build_ca; \
+    export CURL_CA_BUNDLE="$SSL_CERT_FILE" GIT_SSL_CAINFO="$SSL_CERT_FILE" CMAKE_TLS_CAINFO="$SSL_CERT_FILE"; \
+  fi \
+  && apk update \
   && apk upgrade \
   && apk add -U bash --no-cache \
   && /build.sh
@@ -33,7 +38,9 @@ COPY --from=builder /usr/lib/libopentelemetry* /usr/local/lib
 COPY --from=builder /opt /opt
 COPY --from=builder /etc/nginx /etc/nginx
 
-RUN apk update \
+RUN --mount=type=secret,id=build_ca \
+  if [ -f /run/secrets/build_ca ]; then export SSL_CERT_FILE=/run/secrets/build_ca; fi \
+  && apk update \
   && apk upgrade \
   && apk add -U --no-cache \
   bash \

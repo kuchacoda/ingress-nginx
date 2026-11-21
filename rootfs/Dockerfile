@@ -37,7 +37,9 @@ LABEL build_id="${BUILD_ID}"
 
 WORKDIR  /etc/nginx
 
-RUN apk update \
+RUN --mount=type=secret,id=build_ca \
+  if [ -f /run/secrets/build_ca ]; then export SSL_CERT_FILE=/run/secrets/build_ca; fi \
+  && apk update \
   && apk upgrade \
   && apk add --no-cache \
     diffutils \
@@ -70,7 +72,9 @@ RUN bash -xeu -c ' \
   && echo "/lib:/usr/lib:/usr/local/lib:/modules_mount/etc/nginx/modules/otel" > /etc/ld-musl-x86_64.path
   
 
-RUN apk add --no-cache libcap \
+RUN --mount=type=secret,id=build_ca \
+  if [ -f /run/secrets/build_ca ]; then export SSL_CERT_FILE=/run/secrets/build_ca; fi \
+  && apk add --no-cache libcap \
   && setcap    cap_net_bind_service=+ep /nginx-ingress-controller \
   && setcap -v cap_net_bind_service=+ep /nginx-ingress-controller \
   && setcap    cap_net_bind_service=+ep /usr/local/nginx/sbin/nginx \

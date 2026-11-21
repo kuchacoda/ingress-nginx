@@ -39,6 +39,8 @@ balancer.
 From the repository root, use a shell with Docker and the Buildx plugin (on Windows, use WSL with Linux containers enabled).
 The build compiles NGINX with this fork's patches and builds the Go binaries inside Docker.
 
+For this fork's published images, follow the [release build and registry instructions](docs/developer-guide/release-images.md).
+
 ```sh
 ./build/local-images.sh
 docker image ls 'ingress-nginx-local/*'
