@@ -74,19 +74,12 @@ if [[ $mode != publish ]]; then
   [[ $(awk '$1=="Release:" {print $2}' <<< "$version") == "$TAG" &&
      $(awk '$1=="Build:" {print $2}' <<< "$version") == "$COMMIT_SHA" ]] ||
     die "The controller binary does not match this release and checkout."
-  docker run --rm -i --pull=never --platform linux/amd64 "$REGISTRY/controller:$TAG" sh -ec \
-    'cat >/tmp/release-test.conf && nginx -t -c /tmp/release-test.conf' <<'NGINX'
-load_module /etc/nginx/modules/ngx_http_geoip2_module.so;
-load_module /etc/nginx/modules/ngx_http_brotli_filter_module.so;
-load_module /etc/nginx/modules/ngx_http_brotli_static_module.so;
-load_module /etc/nginx/modules/ngx_http_auth_digest_module.so;
-load_module /etc/nginx/modules/ngx_http_modsecurity_module.so;
-load_module /etc/nginx/modules/otel_ngx_module.so;
-pid /tmp/release-test.pid;
-error_log stderr;
-events {}
-http {}
-NGINX
+  {
+    awk '$1 == "load_module" && $2 ~ /^\/etc\/nginx\/modules\/[[:alnum:]_.-]+\.so;$/ && !seen[$2]++ {print $1, $2}' \
+      rootfs/etc/nginx/template/nginx.tmpl
+    printf '%s\n' 'pid /tmp/release-test.pid;' 'error_log stderr;' 'events {}' 'http {}'
+  } | docker run --rm -i --pull=never --platform linux/amd64 "$REGISTRY/controller:$TAG" sh -ec \
+        'cat >/tmp/release-test.conf && nginx -t -c /tmp/release-test.conf'
   docker run --rm --pull=never --platform linux/amd64 "$REGISTRY/kube-webhook-certgen:$TAG" --help >/dev/null
   exit 0
 fi
